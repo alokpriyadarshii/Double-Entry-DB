@@ -1,0 +1,62 @@
+name: db-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ledger
+          POSTGRES_PASSWORD: ledger
+          POSTGRES_DB: ledgerworks
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ledger -d ledgerworks" 
+          --health-interval=5s 
+          --health-timeout=3s 
+          --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Wait for Postgres
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: ledger
+          PGPASSWORD: ledger
+          PGDATABASE: ledgerworks
+        run: |
+          for i in {1..30}; do
+            pg_isready && exit 0
+            sleep 1
+          done
+          exit 1
+
+      - name: Apply migrations
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: ledger
+          PGPASSWORD: ledger
+          PGDATABASE: ledgerworks
+        run: ./scripts/apply_migrations.sh
+
+      - name: Run smoke tests
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: ledger
+          PGPASSWORD: ledger
+          PGDATABASE: ledgerworks
+        run: psql -v ON_ERROR_STOP=1 -f tests/db/smoke_test.sql
