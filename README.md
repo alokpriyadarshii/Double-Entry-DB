@@ -1,99 +1,48 @@
 # Double Entry DB
 
-A **multi-tenant double-entry accounting ledger + invoicing** database built on **PostgreSQL** (Docker + Flyway).
-
 ---
 
-```bash
 set -euo pipefail
-```
 
 ## 1) Go to project folder (adjust if you're already there)
 
 ---
 
-```bash
-cd "Double Entry DB"
-```
+cd "Double-Entry-DB"
 
 ## 2) Start Postgres in background
 
 ---
 
-```bash
-make up
-```
+docker compose up -d db
 
 ## 3) Wait until Postgres is ready
 
 ---
 
-```bash
 until docker compose exec -T db pg_isready -U ledger -d ledgerworks >/dev/null 2>&1; do sleep 0.2; done
-```
 
 ## 4) Run migrations
 
 ---
 
-```bash
-make migrate
-```
+docker compose run --rm flyway
 
 ## 5) Load demo seed data
 
 ---
 
-```bash
-make seed
-```
+./scripts/seed.sh
 
-## 6) Run database smoke tests
+## 6) Run DB smoke tests
 
 ---
 
-```bash
-make test
-```
+./scripts/test.sh
 
-## 7) Open a SQL shell (psql)
+## 7) All commands at once (one paste)
 
 ---
 
-```bash
-make psql
-```
+cd "Double-Entry-DB" 2>/dev/null || true && docker compose up -d db && until docker compose exec -T db pg_isready -U ledger -d ledgerworks >/dev/null 2>&1; do sleep 0.2; done && docker compose run --rm flyway && ./scripts/seed.sh && ./scripts/test.sh
 
----
-
-## Connection details
-
----
-
-- Host: `localhost`
-- Port: `5432`
-- DB: `ledgerworks`
-- User: `ledger`
-- Pass: `ledger`
-
----
-
-## Handy commands
-
----
-
-```bash
-make down    # stop containers
-make reset   # wipe volumes + restart db (DANGER: deletes data)
-```
-
----
-
-## Notes
-
----
-
-- Migrations are **Flyway-compatible** (versioned `V###__*.sql`).
-- Balancing is enforced at **COMMIT** time using a **DEFERRABLE constraint trigger**.
-- Posted journal entries are **immutable** (updates/deletes are blocked).
-- Optional **Row Level Security (RLS)** policies are included for tenant isolation.
