@@ -40,7 +40,7 @@ docker compose run --rm flyway
 
 ./scripts/test.sh
 
-## 7) All commands at once (one paste)
+## 7) All commands at once
 
 ---
 
