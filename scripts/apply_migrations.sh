@@ -6,7 +6,7 @@ set -euo pipefail
 
 MIG_DIR="${1:-db/migrations}"
 
-for f in $(ls -1 "$MIG_DIR"/V*.sql | sort); do
+find "$MIG_DIR" -maxdepth 1 -type f -name 'V*.sql' | sort | while read -r f; do
   echo "==> Applying $f"
   psql -v ON_ERROR_STOP=1 -f "$f"
 done
