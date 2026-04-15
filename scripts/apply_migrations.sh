@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Apply migrations in version order using psql (no Flyway required).
+# Apply migrations in Flyway-like order using psql (no Flyway required).
 # Connection is controlled by standard libpq env vars: PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD.
 
 MIG_DIR="${1:-db/migrations}"
@@ -11,29 +11,26 @@ if [[ ! -d "$MIG_DIR" ]]; then
   exit 1
 fi
 
-mapfile -t migration_files < <(find "$MIG_DIR" -type f -name 'V*.sql' -print | sort -t'/' -k1,1)
+tmp_versions="$(mktemp)"
+trap 'rm -f "$tmp_versions"' EXIT
 
-if [[ ${#migration_files[@]} -eq 0 ]]; then
-  echo "No migration files found under: $MIG_DIR" >&2
+while IFS= read -r f; do
+  file="${f##*/}"
+
+  # Match Flyway-style versioned migrations, e.g. V1__x.sql, V1_2__x.sql, V001__x.sql.
+  if [[ "$file" =~ ^V([0-9][0-9_\.]*)__.+\.sql$ ]]; then
+    version="${BASH_REMATCH[1]}"
+    normalized_version="${version//_/.}"
+    printf '%s\t%s\n' "$normalized_version" "$f" >>"$tmp_versions"
+  fi
+done < <(find "$MIG_DIR" -type f -name 'V*.sql' -print)
+
+if [[ ! -s "$tmp_versions" ]]; then
+  echo "No versioned migration files found under: $MIG_DIR" >&2
   exit 1
 fi
 
-mapfile -t sorted_migrations < <(
-  printf '%s\n' "${migration_files[@]}" \
-    | awk -F/ '
-      {
-        file = $NF
-        if (match(file, /^V([0-9]+)__/ , m)) {
-          printf("%010d\t%s\n", m[1], $0)
-        }
-      }
-    ' \
-    | sort -k1,1n -k2,2 \
-    | cut -f2-
-)
-
-for f in "${sorted_migrations[@]}"; do
-find "$MIG_DIR" -maxdepth 1 -type f -name 'V*.sql' | sort | while read -r f; do
-  echo "==> Applying $f"
-  psql -v ON_ERROR_STOP=1 -f "$f"
+sort -t $'\t' -k1,1V -k2,2 "$tmp_versions" | cut -f2- | while IFS= read -r migration; do
+  echo "==> Applying $migration"
+  psql -v ON_ERROR_STOP=1 -f "$migration"
 done
